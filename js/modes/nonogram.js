@@ -7,7 +7,9 @@ import {
   isLineComplete,
   isSolved,
 } from '../nonogram.js';
+import { generateNonogram } from '../generators.js';
 import { DIFFICULTIES, PUZZLES, puzzleIndexById } from '../puzzles.js';
+import { puzzleIdForSeed } from '../seed.js';
 
 function cellLabel(game, row, column) {
   const value = game.state.cells[row][column];
@@ -32,6 +34,20 @@ export const nonogramMode = {
   cellNoun: 'square',
   winTitle: 'Picture revealed!',
   hint: 'Drag to paint · Right-click to mark · Arrow keys move, <kbd>Space</kbd> fills, <kbd>X</kbd> marks',
+
+  seededPuzzle(seed) {
+    const generated = generateNonogram(seed);
+    return {
+      id: puzzleIdForSeed(seed),
+      name: 'Seeded level',
+      difficulty: generated.difficulty,
+      seeded: true,
+      size: generated.size,
+      solution: generated.solution,
+      clues: generated.clues,
+      filledCount: generated.filledCount,
+    };
+  },
 
   boardLayout(puzzle) {
     return {

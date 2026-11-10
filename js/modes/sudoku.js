@@ -1,3 +1,5 @@
+import { generateSudoku } from '../generators.js';
+import { puzzleIdForSeed } from '../seed.js';
 import { findConflicts, findMistakes, isGiven, isSolved } from '../sudoku.js';
 import { SUDOKU_DIFFICULTIES, SUDOKU_PUZZLES, sudokuIndexById } from '../sudoku-puzzles.js';
 
@@ -42,6 +44,20 @@ export const sudokuMode = {
   winTitle: 'Grid solved!',
   keepSelection: true,
   hint: 'Select a cell, then choose a number · Arrow keys move · <kbd>1</kbd>–<kbd>9</kbd> fill, <kbd>Backspace</kbd> clears',
+
+  seededPuzzle(seed) {
+    const generated = generateSudoku(seed);
+    return {
+      id: puzzleIdForSeed(seed),
+      name: 'Seeded level',
+      difficulty: generated.difficulty,
+      seeded: true,
+      size: { rows: 9, columns: 9 },
+      givens: generated.givens,
+      solution: generated.solution,
+      givensCount: generated.givensCount,
+    };
+  },
 
   boardLayout() {
     return {

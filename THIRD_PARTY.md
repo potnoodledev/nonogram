@@ -4,6 +4,8 @@
 
 The Star Battle region layouts in `js/starbattle-puzzles.js` are adapted from
 the Star Battle levels in [RetroStoneVC](https://github.com/potnoodledev/RetroStoneVC).
+The seeded Star Battle levels in `js/generators.js` start from those layouts
+and adjust their region borders; they carry the same notice.
 
 ```text
 MIT License

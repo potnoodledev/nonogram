@@ -1,4 +1,6 @@
+import { generateStarBattle } from '../generators.js';
 import { createGrid } from '../grid.js';
+import { puzzleIdForSeed } from '../seed.js';
 import {
   DOT,
   EMPTY,
@@ -63,6 +65,21 @@ export const starbattleMode = {
   cellNoun: 'cell',
   winTitle: 'Every star in place!',
   hint: 'Tap to cycle star → dot → empty · Drag to dot a run · Arrow keys move, <kbd>Space</kbd> cycles, <kbd>X</kbd> dots',
+
+  seededPuzzle(seed) {
+    const generated = generateStarBattle(seed);
+    return {
+      id: puzzleIdForSeed(seed),
+      name: 'Seeded level',
+      difficulty: generated.difficulty,
+      seeded: true,
+      size: generated.size,
+      stars: generated.stars,
+      starTotal: generated.starTotal,
+      regions: generated.regions,
+      solution: generated.solution,
+    };
+  },
 
   boardLayout(puzzle) {
     return {
