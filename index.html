@@ -57,6 +57,7 @@
             <h1 id="puzzle-title">Heart</h1>
             <p class="puzzle-meta">
               <span class="badge" id="puzzle-difficulty" data-difficulty="Easy">Easy</span>
+              <span class="badge badge-seeded" id="seeded-badge" hidden>Seeded</span>
               <span class="meta-item" id="puzzle-size">5 × 5</span>
             </p>
           </div>
@@ -80,6 +81,26 @@
             </button>
           </div>
         </div>
+
+        <form class="seed-form" id="seed-form" autocomplete="off">
+          <div class="seed-copy">
+            <label class="seed-label" for="seed-input">Play from a seed</label>
+            <p class="seed-hint" id="seed-hint">The seed picks the difficulty and works in every mode.</p>
+          </div>
+          <div class="seed-controls">
+            <input
+              class="seed-input"
+              id="seed-input"
+              name="seed"
+              type="text"
+              maxlength="48"
+              placeholder="e.g. comet"
+              aria-describedby="seed-hint"
+            >
+            <button class="button" type="submit">Play seed</button>
+            <button class="button button-quiet" type="button" id="random-seed">Random</button>
+          </div>
+        </form>
 
         <div class="board-area">
           <div class="board-scroll">

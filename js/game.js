@@ -9,10 +9,12 @@
  */
 
 import { formatTime } from './grid.js';
+import { normalizeSeed, randomSeed, seedFromPuzzleId } from './seed.js';
 
 const GAME_MODE_KEY = 'grid-games:mode:v1';
 const FEEDBACK_TIMEOUT = 4000;
 const WRONG_HIGHLIGHT_TIMEOUT = 1800;
+const MAX_SEED_LENGTH = 48;
 
 function emptyStore() {
   return { version: 1, currentId: null, puzzles: {} };
@@ -52,6 +54,9 @@ export class GridGame {
     this.dom = dom;
     this.mode = null;
     this.puzzle = null;
+    this.puzzles = [];
+    this.seed = null;
+    this.seededPuzzles = new Map();
     this.state = {
       modeId: null,
       index: 0,
@@ -116,12 +121,32 @@ export class GridGame {
     this.updateModePanels();
     this.dom.boardHint.innerHTML = nextMode.hint ?? '';
     this.dom.winTitle.textContent = nextMode.winTitle;
+
+    const requestedSeed = seedFromPuzzleId(puzzleId);
+    let seed = normalizeSeed(requestedSeed ?? (puzzleId === null ? this.seed : ''));
+    if (seed.length > MAX_SEED_LENGTH) seed = seed.slice(0, MAX_SEED_LENGTH);
+    this.seed = null;
+    this.puzzles = nextMode.puzzles.slice();
+    let seededIndex = -1;
+    if (seed) {
+      const puzzle = this.seededPuzzleFor(seed);
+      this.seed = seed;
+      this.puzzles.push(puzzle);
+      seededIndex = this.puzzles.length - 1;
+      this.dom.seedInput.value = seed;
+    } else {
+      this.dom.seedInput.value = '';
+    }
+
     this.buildPuzzleSelect();
     this.buildTools();
 
-    let index = puzzleId === null ? -1 : nextMode.puzzleIndexById(puzzleId);
-    if (index < 0) index = nextMode.puzzleIndexById(this.state.store.currentId ?? '');
-    if (index < 0) index = 0;
+    let index = seededIndex;
+    if (index < 0) {
+      index = puzzleId === null ? -1 : this.puzzles.findIndex((candidate) => candidate.id === puzzleId);
+      if (index < 0) index = this.puzzles.findIndex((candidate) => candidate.id === (this.state.store.currentId ?? ''));
+      if (index < 0) index = 0;
+    }
 
     writeLastMode(nextMode.id);
     this.loadPuzzle(index);
@@ -134,24 +159,42 @@ export class GridGame {
       this.startMode(parsed.modeId, parsed.puzzleId);
       return;
     }
-    const index = this.mode.puzzleIndexById(parsed.puzzleId);
+
+    const seed = seedFromPuzzleId(parsed.puzzleId);
+    if (seed !== null) {
+      if (seed !== this.seed) this.useSeededPuzzle(seed);
+      return;
+    }
+
+    const requested = this.puzzles.findIndex((candidate) => candidate.id === parsed.puzzleId);
+    if (requested < 0) return;
+    this.clearSeed();
+    const index = this.puzzles.findIndex((candidate) => candidate.id === parsed.puzzleId);
     if (index >= 0 && index !== this.state.index) this.loadPuzzle(index);
   }
 
   parseHash() {
-    let raw;
-    try {
-      raw = decodeURIComponent(window.location.hash.replace(/^#/, ''));
-    } catch {
+    const rawHash = window.location.hash.replace(/^#/, '');
+    if (!rawHash) return null;
+
+    const slash = rawHash.indexOf('/');
+    if (slash > 0) {
+      let modeId;
+      let puzzleId;
+      try {
+        modeId = decodeURIComponent(rawHash.slice(0, slash));
+        puzzleId = decodeURIComponent(rawHash.slice(slash + 1));
+      } catch {
+        return null;
+      }
+      if (this.modes[modeId]) return { modeId, puzzleId };
       return null;
     }
-    if (!raw) return null;
 
-    const slash = raw.indexOf('/');
-    if (slash > 0) {
-      const modeId = raw.slice(0, slash);
-      const puzzleId = raw.slice(slash + 1);
-      if (this.modes[modeId]) return { modeId, puzzleId };
+    let raw;
+    try {
+      raw = decodeURIComponent(rawHash);
+    } catch {
       return null;
     }
 
@@ -160,6 +203,56 @@ export class GridGame {
       if (mode.puzzleIndexById(raw) >= 0) return { modeId: mode.id, puzzleId: raw };
     }
     return null;
+  }
+
+  /** Look a generated puzzle up by mode and seed, generating it once. */
+  seededPuzzleFor(seed) {
+    const key = `${this.mode.id}:${seed}`;
+    let puzzle = this.seededPuzzles.get(key);
+    if (!puzzle) {
+      puzzle = this.mode.seededPuzzle(seed);
+      this.seededPuzzles.set(key, puzzle);
+    }
+    return puzzle;
+  }
+
+  /** Load a level generated from a seed, replacing any catalogue level. */
+  useSeededPuzzle(value) {
+    const seed = normalizeSeed(value);
+    if (!seed) {
+      this.setFeedback('Enter a seed to generate a level.', true);
+      this.dom.seedInput.focus();
+      return;
+    }
+    if (seed.length > MAX_SEED_LENGTH) {
+      this.setFeedback(`Seeds can be at most ${MAX_SEED_LENGTH} characters.`, true);
+      this.dom.seedInput.focus();
+      return;
+    }
+
+    const puzzle = this.seededPuzzleFor(seed);
+    this.seed = seed;
+    this.dom.seedInput.value = seed;
+    this.puzzles = [...this.mode.puzzles, puzzle];
+    this.buildPuzzleSelect();
+    this.loadPuzzle(this.puzzles.length - 1);
+    this.setFeedback(`Seeded ${puzzle.difficulty.toLowerCase()} level ready.`);
+  }
+
+  /** Return to the mode's catalogue levels. */
+  clearSeed() {
+    if (!this.seed) return;
+    this.seed = null;
+    this.dom.seedInput.value = '';
+    this.puzzles = this.mode.puzzles.slice();
+    this.buildPuzzleSelect();
+  }
+
+  goToPuzzle(step) {
+    const count = this.puzzles.length;
+    const target = (this.state.index + step + count) % count;
+    this.clearSeed();
+    this.loadPuzzle(Math.min(target, this.puzzles.length - 1));
   }
 
   updateModeTabs() {
@@ -179,7 +272,7 @@ export class GridGame {
     for (const difficulty of this.mode.difficulties) {
       const group = document.createElement('optgroup');
       group.label = difficulty;
-      for (const puzzle of this.mode.puzzles.filter((candidate) => candidate.difficulty === difficulty)) {
+      for (const puzzle of this.puzzles.filter((candidate) => candidate.difficulty === difficulty)) {
         const option = document.createElement('option');
         option.value = puzzle.id;
         const label = `${puzzle.name} · ${puzzle.size.columns}×${puzzle.size.rows}`;
@@ -187,7 +280,7 @@ export class GridGame {
         option.textContent = label;
         group.append(option);
       }
-      this.dom.puzzleSelect.append(group);
+      if (group.children.length > 0) this.dom.puzzleSelect.append(group);
     }
   }
 
@@ -207,7 +300,7 @@ export class GridGame {
      ------------------------------------------------------------------------ */
 
   loadPuzzle(index, { restore = true } = {}) {
-    if (!Number.isInteger(index) || index < 0 || index >= this.mode.puzzles.length) index = 0;
+    if (!Number.isInteger(index) || index < 0 || index >= this.puzzles.length) index = 0;
     if (this.dom.winDialog.open) this.dom.winDialog.close();
     this.clearWrongHighlights();
     this.clearFeedback();
@@ -217,7 +310,7 @@ export class GridGame {
       this.persistNow();
     }
 
-    const puzzle = this.mode.puzzles[index];
+    const puzzle = this.puzzles[index];
     this.puzzle = puzzle;
     this.state.index = index;
     this.state.solved = false;
@@ -307,11 +400,11 @@ export class GridGame {
   }
 
   nextUnsolvedIndex(fromIndex) {
-    for (let step = 1; step <= this.mode.puzzles.length; step += 1) {
-      const index = (fromIndex + step) % this.mode.puzzles.length;
-      if (this.state.store.puzzles[this.mode.puzzles[index].id]?.solved !== true) return index;
+    for (let step = 1; step <= this.puzzles.length; step += 1) {
+      const index = (fromIndex + step) % this.puzzles.length;
+      if (this.state.store.puzzles[this.puzzles[index].id]?.solved !== true) return index;
     }
-    return (fromIndex + 1) % this.mode.puzzles.length;
+    return (fromIndex + 1) % this.puzzles.length;
   }
 
   /* ------------------------------------------------------------------------
@@ -732,11 +825,12 @@ export class GridGame {
   updateHeader(puzzle) {
     this.dom.puzzleTitle.textContent = puzzle.name;
     this.dom.puzzleNumber.textContent = String(this.state.index + 1);
-    this.dom.puzzleTotal.textContent = String(this.mode.puzzles.length);
+    this.dom.puzzleTotal.textContent = String(this.puzzles.length);
     this.dom.puzzleDifficulty.textContent = puzzle.difficulty;
     this.dom.puzzleDifficulty.dataset.difficulty = puzzle.difficulty;
     this.dom.puzzleSize.textContent = `${puzzle.size.columns} × ${puzzle.size.rows}`;
-    document.title = `${puzzle.name} — ${this.mode.title}`;
+    this.dom.seededBadge.hidden = !puzzle.seeded;
+    document.title = `${puzzle.seeded ? `Seed ${this.seed}` : puzzle.name} — ${this.mode.title}`;
   }
 
   updateSelectLabels() {
@@ -773,16 +867,22 @@ export class GridGame {
 
     this.dom.checkButton.addEventListener('click', () => this.checkMistakes());
     this.dom.resetButton.addEventListener('click', () => this.resetPuzzle());
-    this.dom.prevPuzzle.addEventListener('click', () => {
-      const count = this.mode.puzzles.length;
-      this.loadPuzzle((this.state.index - 1 + count) % count);
+    this.dom.seedForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      this.useSeededPuzzle(this.dom.seedInput.value);
     });
-    this.dom.nextPuzzle.addEventListener('click', () => {
-      const count = this.mode.puzzles.length;
-      this.loadPuzzle((this.state.index + 1) % count);
+    this.dom.randomSeed.addEventListener('click', () => {
+      const seed = randomSeed();
+      this.dom.seedInput.value = seed;
+      this.useSeededPuzzle(seed);
     });
+    this.dom.prevPuzzle.addEventListener('click', () => this.goToPuzzle(-1));
+    this.dom.nextPuzzle.addEventListener('click', () => this.goToPuzzle(1));
     this.dom.puzzleSelect.addEventListener('change', () => {
-      const index = this.mode.puzzleIndexById(this.dom.puzzleSelect.value);
+      const value = this.dom.puzzleSelect.value;
+      if (value === this.puzzle?.id) return;
+      this.clearSeed();
+      const index = this.puzzles.findIndex((candidate) => candidate.id === value);
       if (index >= 0) this.loadPuzzle(index);
     });
     this.dom.playAgain.addEventListener('click', () => {
@@ -792,7 +892,8 @@ export class GridGame {
     this.dom.nextUnsolved.addEventListener('click', () => {
       const next = this.nextUnsolvedIndex(this.state.index);
       this.dom.winDialog.close();
-      this.loadPuzzle(next);
+      this.clearSeed();
+      this.loadPuzzle(Math.min(next, this.puzzles.length - 1));
     });
 
     this.dom.board.addEventListener('contextmenu', (event) => event.preventDefault());
