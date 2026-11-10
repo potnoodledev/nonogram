@@ -724,6 +724,114 @@ h1 {
 }
 
 /* --------------------------------------------------------------------------
+   Star Battle board
+   -------------------------------------------------------------------------- */
+
+.board[data-mode="starbattle"] {
+  --cell: clamp(18px, min(calc((100vw - 96px) / var(--cols)), calc(500px / var(--cols))), 54px);
+  --region-line: rgba(148, 163, 184, 0.5);
+  grid-template-columns: repeat(var(--cols), var(--cell));
+  grid-template-rows: repeat(var(--rows), var(--cell));
+}
+
+.board[data-mode="starbattle"] .cell {
+  position: relative;
+  background-color: var(--cell-bg);
+  background-image: linear-gradient(var(--region-tint, transparent), var(--region-tint, transparent));
+  color: var(--accent);
+  font-size: calc(var(--cell) * 0.62);
+  line-height: 1;
+  border-radius: 1px;
+}
+
+/* The region outline is drawn on a pseudo-element so it does not fight with
+   the focus, conflict and wrong-cell shadows on the button itself. */
+.board[data-mode="starbattle"] .cell::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border: 0 solid var(--region-line);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.board[data-mode="starbattle"] .cell.edge-top::before {
+  border-top-width: 2px;
+}
+
+.board[data-mode="starbattle"] .cell.edge-right::before {
+  border-right-width: 2px;
+}
+
+.board[data-mode="starbattle"] .cell.edge-bottom::before {
+  border-bottom-width: 2px;
+}
+
+.board[data-mode="starbattle"] .cell.edge-left::before {
+  border-left-width: 2px;
+}
+
+.board[data-mode="starbattle"] .cell.is-star {
+  color: var(--accent);
+  text-shadow: 0 0 14px rgba(94, 234, 212, 0.5);
+}
+
+.board[data-mode="starbattle"] .cell.is-dot::after {
+  content: "";
+  width: calc(var(--cell) * 0.2);
+  height: calc(var(--cell) * 0.2);
+  border-radius: 50%;
+  background: rgba(148, 163, 184, 0.62);
+}
+
+.board[data-mode="starbattle"] .cell.is-peer {
+  background: #12223b;
+}
+
+.board[data-mode="starbattle"] .cell.is-hot {
+  background: #17304f;
+  outline: 2px solid var(--blue);
+  outline-offset: -2px;
+  z-index: 1;
+}
+
+.board[data-mode="starbattle"] .cell.is-star.is-conflict {
+  color: var(--danger);
+  text-shadow: 0 0 14px rgba(251, 113, 133, 0.55);
+}
+
+.board[data-mode="starbattle"] .cell.is-wrong {
+  background: rgba(251, 113, 133, 0.18);
+  box-shadow: inset 0 0 0 2px var(--danger);
+}
+
+.board[data-mode="starbattle"] .cell.is-wrong.is-star {
+  color: var(--danger);
+}
+
+.board[data-mode="starbattle"] .cell:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--accent), inset 0 0 0 4px rgba(94, 234, 212, 0.25);
+  z-index: 2;
+}
+
+.board.is-solved[data-mode="starbattle"] .cell.is-star {
+  animation: star-pop 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--order, 0) * 12ms);
+}
+
+@keyframes star-pop {
+  0% {
+    opacity: 0.4;
+    transform: scale(0.45);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* --------------------------------------------------------------------------
    Status bar
    -------------------------------------------------------------------------- */
 
@@ -825,6 +933,19 @@ h1 {
 .digit-erase {
   font-size: 0.72rem;
   font-weight: 600;
+}
+
+.star-progress {
+  margin: 0;
+  padding: 7px 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  background: rgba(148, 163, 184, 0.06);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  white-space: nowrap;
 }
 
 .mode-button {

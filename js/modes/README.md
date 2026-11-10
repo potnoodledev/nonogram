@@ -40,6 +40,9 @@ directory are complete examples; register a new one in `js/app.js`.
 - `onPointerDown(game, row, column, event)`, `onDragEnter(...)`,
   `onKeyboardClick(...)`, `onKeyDown(...)` — mode-specific input. `onKeyDown`
   returns true when it handled the key; the shell then prevents the default.
+- `onPointerUp(game, event)` — called when a pointer is released over the board
+  after `onPointerDown` started a drag. It lets a mode distinguish a tap from a
+  drag; the shell clears `game.state.dragging` afterwards.
 - `keepSelection` — when true, a cell stays selected when focus or the pointer
   leaves the board (used by Sudoku's digit pad).
 

@@ -799,6 +799,9 @@ export class GridGame {
     this.dom.board.addEventListener('pointerleave', () => {
       if (!this.state.dragging && !this.mode.keepSelection) this.setHot(-1, -1);
     });
+    this.dom.board.addEventListener('pointerup', (event) => {
+      if (this.state.dragging) this.mode.onPointerUp?.(this, event);
+    });
     window.addEventListener('pointerup', () => {
       this.state.dragging = false;
     });

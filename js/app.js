@@ -1,5 +1,6 @@
 import { GridGame } from './game.js';
 import { nonogramMode } from './modes/nonogram.js';
+import { starbattleMode } from './modes/starbattle.js';
 import { sudokuMode } from './modes/sudoku.js';
 
 const dom = {
@@ -29,7 +30,7 @@ const dom = {
 };
 
 const game = new GridGame({
-  modes: { nonogram: nonogramMode, sudoku: sudokuMode },
+  modes: { nonogram: nonogramMode, sudoku: sudokuMode, starbattle: starbattleMode },
   dom,
 });
 

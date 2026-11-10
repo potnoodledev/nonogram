@@ -13,6 +13,7 @@ import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 
 import { PUZZLES } from '../js/puzzles.js';
+import { STAR_BATTLE_PUZZLES } from '../js/starbattle-puzzles.js';
 import { SUDOKU_PUZZLES } from '../js/sudoku-puzzles.js';
 
 const baseUrl = process.env.BASE_URL ?? 'http://127.0.0.1:4173/';
@@ -452,6 +453,175 @@ function assertCluesNotClipped(page) {
   assert.equal(await page.locator('.digit-pad').isVisible(), true);
   await assertNoHorizontalOverflow(page);
   await page.screenshot({ path: path.join(outputDir, 'mobile-sudoku.png'), fullPage: true });
+  await context.close();
+}
+
+/* --------------------------------------------------------------------------
+   9. Star Battle: board, region outlines, input, checking and persistence
+   -------------------------------------------------------------------------- */
+
+{
+  const { context, page } = await newPage();
+  await page.goto(`${baseUrl}#starbattle/north-star`, { waitUntil: 'networkidle' });
+  const puzzle = STAR_BATTLE_PUZZLES.find((candidate) => candidate.id === 'north-star');
+  assert.ok(puzzle);
+
+  assert.equal(await page.title(), 'North Star — Star Battle');
+  assert.equal(await page.locator('h1').textContent(), 'North Star');
+  assert.equal(await page.locator('#puzzle-size').textContent(), '6 × 6');
+  assert.equal(await boardCells(page).count(), 36);
+  assert.equal(await page.locator('.clue-row').count(), 0, 'Star Battle has no clue rows');
+  assert.equal(await page.locator('[data-game-mode="starbattle"]').getAttribute('aria-pressed'), 'true');
+  assert.equal(await page.evaluate(() => location.hash), '#starbattle/north-star');
+  assert.equal(await page.locator('.star-progress').textContent(), '0 / 6 stars');
+  assert.ok((await page.locator('.cell.edge-top').count()) > 0, 'regions have top edges');
+  assert.ok((await page.locator('.cell.edge-right').count()) > 0, 'regions have right edges');
+  assert.ok((await page.locator('.cell.edge-bottom').count()) > 0, 'regions have bottom edges');
+  assert.ok((await page.locator('.cell.edge-left').count()) > 0, 'regions have left edges');
+
+  await assertNoHorizontalOverflow(page);
+  await page.screenshot({ path: path.join(outputDir, 'desktop-starbattle.png') });
+
+  /* Tap cycles empty -> star -> dot -> empty. */
+  await cellAt(page, 0, 0).click();
+  assert.match(await cellAt(page, 0, 0).getAttribute('class'), /is-star/);
+  assert.equal(await cellAt(page, 0, 0).textContent(), '★');
+  assert.equal(await page.locator('.star-progress').textContent(), '1 / 6 stars');
+  await cellAt(page, 0, 0).click();
+  assert.match(await cellAt(page, 0, 0).getAttribute('class'), /is-dot/);
+  assert.equal(await page.locator('.star-progress').textContent(), '0 / 6 stars');
+  await cellAt(page, 0, 0).click();
+  assert.doesNotMatch(await cellAt(page, 0, 0).getAttribute('class'), /is-star|is-dot/);
+
+  /* Right-click toggles a note without changing the stars. */
+  await cellAt(page, 0, 1).click({ button: 'right' });
+  assert.match(await cellAt(page, 0, 1).getAttribute('class'), /is-dot/);
+  await cellAt(page, 0, 1).click({ button: 'right' });
+  assert.doesNotMatch(await cellAt(page, 0, 1).getAttribute('class'), /is-dot/);
+  await page.getByRole('button', { name: 'Reset' }).click();
+
+  /* Dragging dots a run in one gesture. */
+  const start = await cellAt(page, 0, 0).boundingBox();
+  const end = await cellAt(page, 0, 2).boundingBox();
+  await page.mouse.move(start.x + start.width / 2, start.y + start.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(end.x + end.width / 2, end.y + end.height / 2, { steps: 5 });
+  await page.mouse.up();
+  assert.equal(await page.locator('.cell.is-dot').count(), 3, 'drag dots three cells');
+  assert.equal(await page.locator('.cell.is-star').count(), 0);
+  assert.equal(await page.locator('#moves').textContent(), '3');
+  await page.getByRole('button', { name: 'Reset' }).click();
+
+  /* Keyboard: Space cycles, X dots and Delete clears. */
+  await cellAt(page, 0, 0).focus();
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('Space');
+  assert.match(await cellAt(page, 0, 1).getAttribute('class'), /is-star/);
+  await page.keyboard.press('x');
+  assert.match(await cellAt(page, 0, 1).getAttribute('class'), /is-dot/);
+  await page.keyboard.press('Delete');
+  assert.doesNotMatch(await cellAt(page, 0, 1).getAttribute('class'), /is-star|is-dot/);
+
+  /* Selecting a cell highlights its row, column and region. */
+  await cellAt(page, 0, 0).focus();
+  assert.equal(await page.locator('.cell.is-hot').count(), 1);
+  assert.ok((await page.locator('.cell.is-peer').count()) > 0, 'selected lines and region are highlighted');
+
+  /* Check highlights a wrong star. */
+  await page.getByRole('button', { name: 'Reset' }).click();
+  const wrongStar = puzzle.solution.flatMap((row, rowIndex) =>
+    row.map((isStar, columnIndex) => (isStar ? null : [rowIndex, columnIndex])),
+  ).find(Boolean);
+  await cellAt(page, ...wrongStar).click();
+  await page.getByRole('button', { name: 'Check' }).click();
+  await page.locator('.cell.is-wrong').first().waitFor();
+  assert.match(await page.locator('#feedback').textContent(), /wrong/);
+  assert.equal(await page.locator('.cell.is-wrong').count(), 1);
+
+  /* Stars that touch are flagged immediately. */
+  await page.getByRole('button', { name: 'Reset' }).click();
+  await cellAt(page, 0, 0).click();
+  await cellAt(page, 0, 1).click();
+  assert.ok((await page.locator('.cell.is-conflict').count()) >= 2, 'touching stars conflict');
+
+  /* Progress is stored under the Star Battle key and restored after reload. */
+  await page.getByRole('button', { name: 'Reset' }).click();
+  const savedStar = puzzle.solution.flatMap((row, rowIndex) =>
+    row.map((isStar, columnIndex) => (isStar ? [rowIndex, columnIndex] : null)),
+  ).find(Boolean);
+  await cellAt(page, ...savedStar).click();
+  await page.waitForFunction(([row, column]) => {
+    const raw = localStorage.getItem('starbattle:progress:v1');
+    if (!raw) return false;
+    try {
+      const saved = JSON.parse(raw);
+      return saved.puzzles?.['north-star']?.moves === 1 && saved.puzzles['north-star'].cells?.[row]?.[column] === 1;
+    } catch {
+      return false;
+    }
+  }, savedStar);
+  await page.reload({ waitUntil: 'networkidle' });
+  assert.match(await cellAt(page, ...savedStar).getAttribute('class'), /is-star/);
+  assert.equal(await page.locator('#moves').textContent(), '1');
+  await page.getByRole('button', { name: 'Reset' }).click();
+
+  /* Switching modes keeps each mode's own puzzle and URL. */
+  await page.locator('[data-game-mode="nonogram"]').click();
+  assert.equal(await page.locator('#puzzle-title').textContent(), 'Heart');
+  assert.equal(await page.evaluate(() => location.hash), '#nonogram/heart');
+  await page.locator('[data-game-mode="starbattle"]').click();
+  assert.equal(await page.locator('#puzzle-title').textContent(), 'North Star');
+  assert.equal(await page.evaluate(() => location.hash), '#starbattle/north-star');
+
+  await context.close();
+}
+
+/* --------------------------------------------------------------------------
+   10. Solving a Star Battle, the win dialog and replay
+   -------------------------------------------------------------------------- */
+
+{
+  const { context, page } = await newPage();
+  await page.goto(`${baseUrl}#starbattle/north-star`, { waitUntil: 'networkidle' });
+  const puzzle = STAR_BATTLE_PUZZLES.find((candidate) => candidate.id === 'north-star');
+  assert.ok(puzzle);
+
+  for (let row = 0; row < puzzle.size.rows; row += 1) {
+    for (let column = 0; column < puzzle.size.columns; column += 1) {
+      if (puzzle.solution[row][column]) await cellAt(page, row, column).click();
+    }
+  }
+
+  await page.locator('#win-dialog[open]').waitFor();
+  assert.equal(await page.locator('#solved-badge').isVisible(), true);
+  assert.equal(await page.locator('.cell.is-star').count(), puzzle.starTotal);
+  assert.equal(await page.locator('#win-title').textContent(), 'Every star in place!');
+  const detail = await page.locator('#win-detail').textContent();
+  assert.match(detail, /North Star · \d+:\d{2} · 6 moves/);
+  await page.screenshot({ path: path.join(outputDir, 'desktop-starbattle-solved.png') });
+
+  await page.getByRole('button', { name: 'Play again' }).click();
+  await page.locator('#win-dialog').waitFor({ state: 'hidden' });
+  assert.equal(await page.locator('.cell.is-star').count(), 0);
+  assert.equal(await page.locator('#solved-badge').isVisible(), false);
+  assert.equal(await page.locator('#moves').textContent(), '0');
+  assert.equal(await page.locator('.star-progress').textContent(), '0 / 6 stars');
+  await context.close();
+}
+
+/* --------------------------------------------------------------------------
+   11. The mobile Star Battle layout
+   -------------------------------------------------------------------------- */
+
+{
+  const { context, page } = await newPage({ width: 390, height: 844 });
+  await page.goto(`${baseUrl}#starbattle/event-horizon`, { waitUntil: 'networkidle' });
+  assert.equal(await boardCells(page).count(), 100);
+  assert.equal(await page.locator('#puzzle-difficulty').textContent(), 'Hard');
+  assert.equal(await page.locator('#puzzle-size').textContent(), '10 × 10');
+  assert.equal(await page.locator('.star-progress').isVisible(), true);
+  await assertNoHorizontalOverflow(page);
+  await page.screenshot({ path: path.join(outputDir, 'mobile-starbattle.png'), fullPage: true });
   await context.close();
 }
 

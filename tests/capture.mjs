@@ -13,6 +13,7 @@ import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 
 import { PUZZLES } from '../js/puzzles.js';
+import { STAR_BATTLE_PUZZLES } from '../js/starbattle-puzzles.js';
 import { SUDOKU_PUZZLES } from '../js/sudoku-puzzles.js';
 
 const baseUrl = process.env.BASE_URL ?? 'http://127.0.0.1:4173/';
@@ -34,6 +35,7 @@ const browser = await chromium.launch(
 const errors = [];
 const heart = PUZZLES.find((puzzle) => puzzle.id === 'heart');
 const firstLight = SUDOKU_PUZZLES.find((puzzle) => puzzle.id === 'first-light');
+const eventHorizon = STAR_BATTLE_PUZZLES.find((puzzle) => puzzle.id === 'event-horizon');
 const cell = (row, column) => `.cell[data-row="${row}"][data-column="${column}"]`;
 
 async function openPage(viewport) {
@@ -83,6 +85,41 @@ async function captureSudoku(viewport, name, fullPage) {
   await context.close();
 }
 
+async function captureStarBattle(viewport, name, fullPage) {
+  const { context, page } = await openPage(viewport);
+  await page.goto(`${baseUrl}#starbattle/event-horizon`, { waitUntil: 'networkidle' });
+
+  const stars = [];
+  for (let row = 0; row < eventHorizon.size.rows; row += 1) {
+    for (let column = 0; column < eventHorizon.size.columns; column += 1) {
+      if (eventHorizon.solution[row][column]) stars.push([row, column]);
+    }
+  }
+  for (const [row, column] of stars.slice(0, 10)) {
+    await page.locator(cell(row, column)).click();
+  }
+
+  const dotted = new Set();
+  for (const [row, column] of stars.slice(0, 10)) {
+    for (let rowStep = -1; rowStep <= 1; rowStep += 1) {
+      for (let columnStep = -1; columnStep <= 1; columnStep += 1) {
+        const nextRow = row + rowStep;
+        const nextColumn = column + columnStep;
+        if (nextRow < 0 || nextRow >= eventHorizon.size.rows) continue;
+        if (nextColumn < 0 || nextColumn >= eventHorizon.size.columns) continue;
+        if (eventHorizon.solution[nextRow][nextColumn]) continue;
+        const key = `${nextRow},${nextColumn}`;
+        if (dotted.has(key)) continue;
+        dotted.add(key);
+        await page.locator(cell(nextRow, nextColumn)).click({ button: 'right' });
+      }
+    }
+  }
+
+  await page.screenshot({ path: path.join(outputDir, `${prefix}-${name}.png`), fullPage });
+  await context.close();
+}
+
 const hasSudoku = await (async () => {
   const { context, page } = await openPage({ width: 1440, height: 900 });
   await page.goto(`${baseUrl}#sudoku/first-light`, { waitUntil: 'networkidle' });
@@ -91,10 +128,20 @@ const hasSudoku = await (async () => {
   return present;
 })();
 
+const hasStarBattle = await (async () => {
+  const { context, page } = await openPage({ width: 1440, height: 900 });
+  await page.goto(`${baseUrl}#starbattle/event-horizon`, { waitUntil: 'networkidle' });
+  const present = (await page.locator('[data-game-mode="starbattle"]').count()) > 0;
+  await context.close();
+  return present;
+})();
+
 await captureNonogram({ width: 1440, height: 900 }, 'nonogram-desktop', false);
 if (hasSudoku) await captureSudoku({ width: 1440, height: 900 }, 'sudoku-desktop', false);
+if (hasStarBattle) await captureStarBattle({ width: 1440, height: 900 }, 'starbattle-desktop', false);
 await captureNonogram({ width: 390, height: 844 }, 'nonogram-mobile', true);
 if (hasSudoku) await captureSudoku({ width: 390, height: 844 }, 'sudoku-mobile', true);
+if (hasStarBattle) await captureStarBattle({ width: 390, height: 844 }, 'starbattle-mobile', true);
 
 assertNoErrors();
 await browser.close();
