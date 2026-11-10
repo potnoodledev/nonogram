@@ -749,6 +749,59 @@ function assertCluesNotClipped(page) {
 }
 
 /* --------------------------------------------------------------------------
+   13. Generated levels can be solved in every mode
+   -------------------------------------------------------------------------- */
+
+{
+  const { context, page } = await newPage();
+  const seed = '123456';
+  await page.goto(`${baseUrl}#heart`, { waitUntil: 'networkidle' });
+  await page.fill('#seed-input', seed);
+  await page.click('#seed-form button[type="submit"]');
+  await page.waitForFunction(() => document.title.startsWith('Seed '));
+
+  const nonogram = generateNonogram(seed);
+  for (let row = 0; row < nonogram.size.rows; row += 1) {
+    for (let column = 0; column < nonogram.size.columns; column += 1) {
+      if (nonogram.solution[row][column]) await cellAt(page, row, column).click();
+    }
+  }
+  await page.locator('#win-dialog[open]').waitFor();
+  assert.equal(await page.locator('#win-title').textContent(), 'Picture revealed!');
+  assert.match(await page.locator('#win-detail').textContent(), /Seeded level/);
+  await page.getByRole('button', { name: 'Play again' }).click();
+
+  await page.locator('[data-game-mode="sudoku"]').click();
+  await page.waitForFunction(() => document.title.startsWith('Seed '));
+  const sudoku = generateSudoku(seed);
+  for (let row = 0; row < 9; row += 1) {
+    for (let column = 0; column < 9; column += 1) {
+      if (sudoku.givens[row][column] !== 0) continue;
+      await cellAt(page, row, column).click();
+      await page.keyboard.press(String(sudoku.solution[row][column]));
+    }
+  }
+  await page.locator('#win-dialog[open]').waitFor();
+  assert.equal(await page.locator('#win-title').textContent(), 'Grid solved!');
+  assert.match(await page.locator('#win-detail').textContent(), /Seeded level/);
+  await page.getByRole('button', { name: 'Play again' }).click();
+
+  await page.locator('[data-game-mode="starbattle"]').click();
+  await page.waitForFunction(() => document.title.startsWith('Seed '));
+  const starbattle = generateStarBattle(seed);
+  for (let row = 0; row < starbattle.size.rows; row += 1) {
+    for (let column = 0; column < starbattle.size.columns; column += 1) {
+      if (starbattle.solution[row][column]) await cellAt(page, row, column).click();
+    }
+  }
+  await page.locator('#win-dialog[open]').waitFor();
+  assert.equal(await page.locator('#win-title').textContent(), 'Every star in place!');
+  assert.match(await page.locator('#win-detail').textContent(), /Seeded level/);
+
+  await context.close();
+}
+
+/* --------------------------------------------------------------------------
    Done
    -------------------------------------------------------------------------- */
 
