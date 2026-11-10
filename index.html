@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="dark">
     <meta name="theme-color" content="#070b14">
-    <title>Grid games — nonogram and sudoku</title>
+    <title>Grid games — nonogram, sudoku and star battle</title>
     <meta
       name="description"
-      content="A free puzzle site with nonogram and sudoku modes. Fill a grid from number clues or solve a 9×9 sudoku. No guessing required."
+      content="A free puzzle site with nonogram, sudoku and star battle modes. Fill a grid from number clues, solve a 9×9 sudoku or place stars in every row, column and region. No guessing required."
     >
     <link
       rel="icon"
@@ -45,6 +45,9 @@
           </button>
           <button class="game-mode-button" type="button" data-game-mode="sudoku" aria-pressed="false">
             Sudoku
+          </button>
+          <button class="game-mode-button" type="button" data-game-mode="starbattle" aria-pressed="false">
+            Star Battle
           </button>
         </div>
 
@@ -175,6 +178,40 @@
               <ul class="control-list">
                 <li>Start with the rows, columns or boxes that already hold the most numbers.</li>
                 <li>A digit can only appear once in each row, column and box.</li>
+                <li>Every puzzle here has exactly one solution and can be solved by logic alone.</li>
+                <li>Your progress is saved in this browser automatically.</li>
+              </ul>
+            </div>
+          </details>
+        </div>
+
+
+        <div class="mode-panels" data-mode-panel="starbattle" hidden>
+          <details class="panel" open>
+            <summary>How to play</summary>
+            <div class="panel-body">
+              <p>
+                Place stars so every row, every column and every outlined region holds the same number
+                of stars: one on the 6×6 and 8×8 boards, two on the 10×10 board. Two stars never touch,
+                not even at a corner.
+              </p>
+              <ul class="control-list">
+                <li><strong>Click or tap</strong> a cell to cycle from empty to star to dot and back.</li>
+                <li><strong>Drag</strong> across cells to dot a whole run at once.</li>
+                <li>Use <strong>right-click</strong> to add or remove a dot without touching a star.</li>
+                <li><strong>Check</strong> briefly highlights cells that clash with the solution; clashing
+                  stars turn red as you play.</li>
+              </ul>
+            </div>
+          </details>
+
+          <details class="panel">
+            <summary>Star Battle tips</summary>
+            <div class="panel-body">
+              <ul class="control-list">
+                <li>Start with a region that has only as many cells as it needs stars: they all hold stars.</li>
+                <li>A row or column with just enough free cells for its missing stars works the same way.</li>
+                <li>Once a star is placed, dot the eight cells around it.</li>
                 <li>Every puzzle here has exactly one solution and can be solved by logic alone.</li>
                 <li>Your progress is saved in this browser automatically.</li>
               </ul>
