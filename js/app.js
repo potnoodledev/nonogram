@@ -99,7 +99,7 @@ function savedProgress(puzzle) {
 }
 
 function currentElapsed() {
-  if (state.solved || state.timerStartedAt === null) return state.elapsedBase;
+  if (state.timerStartedAt === null) return state.elapsedBase;
   return state.elapsedBase + Math.floor((Date.now() - state.timerStartedAt) / 1000);
 }
 
@@ -662,8 +662,8 @@ function nextUnsolvedIndex(fromIndex) {
 }
 
 function finishPuzzle() {
-  state.solved = true;
   stopTimer();
+  state.solved = true;
   state.dragging = false;
   persistNow();
   updateSolvedUI();

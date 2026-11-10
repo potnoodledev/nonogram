@@ -141,16 +141,30 @@ function assertCluesNotClipped(page) {
   const heart = PUZZLES.find((puzzle) => puzzle.id === 'heart');
   assert.ok(heart);
 
+  let firstFill = true;
   for (let row = 0; row < heart.size.rows; row += 1) {
     for (let column = 0; column < heart.size.columns; column += 1) {
-      if (heart.solution[row][column]) await cellAt(page, row, column).click();
+      if (!heart.solution[row][column]) continue;
+      await cellAt(page, row, column).click();
+      if (firstFill) {
+        firstFill = false;
+        await page.waitForFunction(
+          () => document.querySelector('#timer')?.textContent !== '0:00',
+          null,
+          { timeout: 5000 },
+        );
+      }
     }
   }
 
   await page.locator('#win-dialog[open]').waitFor();
   assert.equal(await page.locator('#solved-badge').isVisible(), true);
   assert.equal(await page.locator('.clue.is-complete').count(), 10, 'all ten lines complete');
-  assert.match(await page.locator('#win-detail').textContent(), /Heart · \d+:\d{2} · \d+ moves/);
+  const detail = await page.locator('#win-detail').textContent();
+  assert.match(detail, /Heart · \d+:\d{2} · \d+ moves/);
+  const elapsed = (await page.locator('#timer').textContent()).trim();
+  assert.notEqual(elapsed, '0:00', 'solving time is recorded');
+  assert.ok(detail.includes(elapsed), `win dialog shows the recorded time (${elapsed})`);
   assert.equal(await page.locator('.cell.is-filled').count(), heart.filledCount);
   await page.screenshot({ path: path.join(outputDir, 'desktop-solved.png') });
 
