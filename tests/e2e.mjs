@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 
+import { difficultyForSeed, generateNonogram, generateStarBattle, generateSudoku } from '../js/generators.js';
 import { PUZZLES } from '../js/puzzles.js';
 import { STAR_BATTLE_PUZZLES } from '../js/starbattle-puzzles.js';
 import { SUDOKU_PUZZLES } from '../js/sudoku-puzzles.js';
@@ -622,6 +623,128 @@ function assertCluesNotClipped(page) {
   assert.equal(await page.locator('.star-progress').isVisible(), true);
   await assertNoHorizontalOverflow(page);
   await page.screenshot({ path: path.join(outputDir, 'mobile-starbattle.png'), fullPage: true });
+  await context.close();
+}
+
+/* --------------------------------------------------------------------------
+   12. Seeded levels: generation, sharing, cross-mode play, persistence
+   -------------------------------------------------------------------------- */
+
+{
+  const { context, page } = await newPage();
+  await page.goto(`${baseUrl}#heart`, { waitUntil: 'networkidle' });
+  assert.equal(await page.locator('#seed-input').inputValue(), '');
+  assert.equal(await page.locator('#seeded-badge').isVisible(), false);
+
+  await page.fill('#seed-input', 'comet');
+  await page.click('#seed-form button[type="submit"]');
+  assert.equal(await page.title(), 'Seed comet — Nonogram');
+  assert.equal(await page.locator('h1').textContent(), 'Seeded level');
+  assert.equal(await page.locator('#seeded-badge').isVisible(), true);
+  assert.equal(await page.locator('#puzzle-difficulty').textContent(), difficultyForSeed('comet'));
+  assert.equal(await page.evaluate(() => location.hash), '#nonogram/seed%3Acomet');
+  assert.equal(await page.locator('#puzzle-select').inputValue(), 'seed:comet');
+  assert.match(await page.locator('#feedback').textContent(), /Seeded medium level ready/);
+
+  const nonogram = generateNonogram('comet');
+  assert.equal(await boardCells(page).count(), nonogram.size.rows * nonogram.size.columns);
+  const generatedRowClues = await page.locator('.clue-row').evaluateAll((els) =>
+    els.map((el) => [...el.querySelectorAll('.clue-number')].map((span) => span.textContent).join(' ')),
+  );
+  assert.deepEqual(generatedRowClues, nonogram.clues.rows.map((clue) => clue.join(' ')));
+
+  /* A seeded level can be linked and survives a reload. */
+  await page.reload({ waitUntil: 'networkidle' });
+  assert.equal(await page.title(), 'Seed comet — Nonogram');
+  assert.equal(await page.locator('#seed-input').inputValue(), 'comet');
+  assert.equal(await page.locator('#seeded-badge').isVisible(), true);
+  assert.equal(await boardCells(page).count(), nonogram.size.rows * nonogram.size.columns);
+
+  /* Progress on a seeded level is saved under its puzzle id. */
+  const filled = nonogram.solution.flatMap((row, rowIndex) =>
+    row.map((isFilled, columnIndex) => (isFilled ? [rowIndex, columnIndex] : null)),
+  )[0];
+  await cellAt(page, ...filled).click();
+  await page.waitForFunction(() => {
+    const raw = localStorage.getItem('nonogram:progress:v1');
+    if (!raw) return false;
+    try {
+      return JSON.parse(raw).puzzles?.['seed:comet']?.moves === 1;
+    } catch {
+      return false;
+    }
+  });
+  await page.reload({ waitUntil: 'networkidle' });
+  assert.match(await cellAt(page, ...filled).getAttribute('class'), /is-filled/);
+  assert.equal(await page.locator('#moves').textContent(), '1');
+  await page.getByRole('button', { name: 'Reset' }).click();
+
+  /* The same seed carries across the mode tabs. */
+  await page.locator('[data-game-mode="sudoku"]').click();
+  assert.equal(await page.title(), 'Seed comet — Sudoku');
+  assert.equal(await page.evaluate(() => location.hash), '#sudoku/seed%3Acomet');
+  assert.equal(await page.locator('#seed-input').inputValue(), 'comet');
+  const sudoku = generateSudoku('comet');
+  assert.equal(await page.locator('.cell.is-given').count(), sudoku.givensCount);
+
+  await page.locator('[data-game-mode="starbattle"]').click();
+  assert.equal(await page.title(), 'Seed comet — Star Battle');
+  assert.equal(await page.evaluate(() => location.hash), '#starbattle/seed%3Acomet');
+  assert.equal(await page.locator('#seed-input').inputValue(), 'comet');
+  const starbattle = generateStarBattle('comet');
+  assert.equal(await boardCells(page).count(), starbattle.size.rows * starbattle.size.columns);
+  assert.equal(await page.locator('.star-progress').textContent(), `0 / ${starbattle.starTotal} stars`);
+
+  /* Choosing a catalogue puzzle leaves seeded mode. */
+  await page.selectOption('#puzzle-select', 'north-star');
+  assert.equal(await page.title(), 'North Star — Star Battle');
+  assert.equal(await page.evaluate(() => location.hash), '#starbattle/north-star');
+  assert.equal(await page.locator('#seed-input').inputValue(), '');
+  assert.equal(await page.locator('#seeded-badge').isVisible(), false);
+
+  /* Random picks a fresh seed. */
+  await page.locator('[data-game-mode="nonogram"]').click();
+  await page.click('#random-seed');
+  await page.waitForFunction(() => document.title.startsWith('Seed '));
+  const randomSeed = await page.locator('#seed-input').inputValue();
+  assert.ok(randomSeed.length > 0, 'the Random button fills a seed');
+  assert.equal(await page.locator('#seeded-badge').isVisible(), true);
+
+  /* A blank seed is rejected without changing the board. */
+  const beforeBlank = await page.locator('h1').textContent();
+  const hashBeforeBlank = await page.evaluate(() => location.hash);
+  await page.fill('#seed-input', '   ');
+  await page.click('#seed-form button[type="submit"]');
+  assert.match(await page.locator('#feedback').textContent(), /Enter a seed/);
+  assert.equal(await page.locator('h1').textContent(), beforeBlank);
+  assert.equal(await page.evaluate(() => location.hash), hashBeforeBlank);
+
+  await context.close();
+}
+
+/* A seed with slashes, spaces and non-ASCII characters still round-trips. */
+{
+  const { context, page } = await newPage();
+  const seed = 'a/b c ☄';
+  await page.goto(`${baseUrl}#sudoku/seed%3A${encodeURIComponent(seed)}`, { waitUntil: 'networkidle' });
+  assert.equal(await page.locator('#seed-input').inputValue(), seed);
+  assert.equal(await page.title(), `Seed ${seed} — Sudoku`);
+  assert.equal(await page.evaluate(() => decodeURIComponent(location.hash)), `#sudoku/seed:${seed}`);
+  assert.equal(await boardCells(page).count(), 81);
+  assert.equal(await page.locator('.cell.is-given').count(), generateSudoku(seed).givensCount);
+  await context.close();
+}
+
+/* The seed form fits the mobile layout without widening the page. */
+{
+  const { context, page } = await newPage({ width: 390, height: 844 });
+  await page.goto(`${baseUrl}#sudoku/first-light`, { waitUntil: 'networkidle' });
+  assert.equal(await page.locator('#seed-form').isVisible(), true);
+  await page.fill('#seed-input', 'comet');
+  await page.click('#seed-form button[type="submit"]');
+  assert.equal(await page.title(), 'Seed comet — Sudoku');
+  await assertNoHorizontalOverflow(page);
+  await page.screenshot({ path: path.join(outputDir, 'mobile-seeded.png'), fullPage: true });
   await context.close();
 }
 

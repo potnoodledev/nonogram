@@ -4,7 +4,7 @@
 roving keyboard focus, pointer handling, move count, timer, `localStorage`,
 the Check helper, the mode/puzzle pickers and the win dialog.
 
-A mode adapter supplies the rules and presentation. Both objects in this
+A mode adapter supplies the rules and presentation. The objects in this
 directory are complete examples; register a new one in `js/app.js`.
 
 ## Required fields and methods
@@ -12,6 +12,9 @@ directory are complete examples; register a new one in `js/app.js`.
 - `id`, `title` — used in the URL hash, the mode tabs and the page title.
 - `storageKey` — the `localStorage` key for this mode's progress.
 - `puzzles`, `difficulties`, `puzzleIndexById(id)` — the catalogue.
+- `seededPuzzle(seed)` — a generated puzzle for a seed, with the `seed:<seed>`
+  id the shell stores progress under. The generators in `js/generators.js`
+  already cover the three modes.
 - `hint` — trusted HTML for the line below the board.
 - `winTitle` — the heading shown in the win dialog.
 - `createCells(puzzle)` — a fresh, independent cell grid.

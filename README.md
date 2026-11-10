@@ -4,7 +4,7 @@ A small, dependency-free collection of grid puzzles that runs as a static site o
 
 **▶ [Play the games](https://potnoodledev.github.io/nonogram/)**
 
-![The nonogram mode showing a partly solved Heart puzzle](docs/evidence/after-nonogram-desktop.png)
+![The nonogram mode showing a partly solved Heart puzzle and the seed box](docs/evidence/seed-after-nonogram-desktop.png)
 
 The site has three modes that share one game shell:
 
@@ -17,6 +17,7 @@ All three modes use the same board rendering, timer, move counter, progress pers
 ## Features
 
 - Nine nonogram puzzles from 5×5 to 15×15, nine Sudoku puzzles and nine Star Battle puzzles, grouped into Easy, Medium and Hard.
+- Play a level generated from any seed, in every mode: type a seed (or press **Random**) and the same seed gives a matching Easy, Medium or Hard level in nonogram, Sudoku and Star Battle.
 - Star Battle boards come in three sizes: 6×6 with one star per line, 8×8 with one, and 10×10 with two.
 - Nonogram clues are derived from the art at load time; Sudoku solutions are derived from the givens and Star Battle solutions from the region layouts. Puzzle data cannot drift from its solution.
 - Mouse, touch and keyboard input — drag to paint nonogram squares, right-click to mark or erase, type Sudoku digits straight into the grid, and tap a Star Battle cell to cycle through star, dot and empty.
@@ -25,9 +26,23 @@ All three modes use the same board rendering, timer, move counter, progress pers
 - Progress, timer and move count are saved in `localStorage` per mode, so a reload does not lose your place.
 - No build step, no dependencies and no tracking.
 
-![The Sudoku mode showing the selected cell's row, column and box](docs/evidence/after-sudoku-desktop.png)
+![The Sudoku mode showing the selected cell's row, column and box](docs/evidence/seed-after-sudoku-desktop.png)
 
-![The Star Battle mode showing outlined regions, stars and notes](docs/evidence/after-starbattle-desktop.png)
+![The Star Battle mode showing outlined regions, stars and notes](docs/evidence/seed-after-starbattle-desktop.png)
+
+## Seeded levels
+
+![A 10×10 nonogram generated from the seed "comet"](docs/evidence/seed-after-generated-nonogram.png)
+
+The puzzle picker keeps the curated levels, and the box above the board adds a level generated from a seed. The seed chooses the difficulty, so the same seed gives a matching level in all three modes:
+
+- **Easy** — a 5×5 nonogram, a Sudoku with about 40 givens, or a 6×6 Star Battle with one star per line.
+- **Medium** — a 10×10 nonogram, a Sudoku with about 32 givens, or an 8×8 Star Battle with one star per line.
+- **Hard** — a 15×15 nonogram, a Sudoku with about 26 givens, or a 10×10 Star Battle with two stars per line.
+
+Type a seed and press **Play seed** (or **Random** for a fresh one). The generated level goes into the puzzle picker, appears in the URL (for example `#nonogram/seed:comet`), and keeps its progress in `localStorage` like a catalogue puzzle. Switching mode tabs while a seed is active keeps that seed, so the same word can be played in every mode; choosing a curated puzzle leaves seeded mode.
+
+Every generated level has exactly one solution. The nonogram and Sudoku generators build a puzzle and check that solution count while they work; the Star Battle generator starts from a curated layout and makes seeded border moves, keeping only moves that preserve its single solution.
 
 ## Run locally
 
@@ -44,7 +59,7 @@ Then open <http://127.0.0.1:4173/>.
 npm test
 ```
 
-This runs the Node suite for the nonogram clue calculation, the Sudoku rules and the Star Battle rules. It validates that every nonogram's derived clues match its art, that every Sudoku has exactly one solution and that every Star Battle layout has exactly one solution.
+This runs the Node suite for the nonogram clue calculation, the Sudoku rules, the Star Battle rules and the seeded generators. It validates that every nonogram's derived clues match its art, that every Sudoku and Star Battle layout has exactly one solution, and that a seed produces the same unique, valid level every time.
 
 The browser smoke test (all modes, layout, input, solving, persistence) needs Playwright and a running local server:
 
@@ -64,6 +79,8 @@ index.html               page shell and the per-mode help panels
 css/styles.css           all styling, including the responsive board sizing
 js/grid.js               tiny shared helpers (grids, time formatting)
 js/game.js               shared game shell: board, input, timer, persistence, dialogs
+js/seed.js               seed hashing, normalized ids and the seeded random generator
+js/generators.js         seeded nonogram, Sudoku and Star Battle level generators
 js/modes/nonogram.js     nonogram rules adapter and clue rendering
 js/modes/sudoku.js       sudoku rules adapter, digit pad and highlighting
 js/modes/starbattle.js   star battle rules adapter, region rendering and input
