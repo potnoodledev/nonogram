@@ -212,7 +212,16 @@ function assertCluesNotClipped(page) {
   const { context, page } = await newPage();
   await page.goto(`${baseUrl}#heart`, { waitUntil: 'networkidle' });
   await cellAt(page, 0, 1).click();
-  await page.waitForTimeout(250); // allow the debounced save
+  await page.waitForFunction(() => {
+    const raw = localStorage.getItem('nonogram:progress:v1');
+    if (!raw) return false;
+    try {
+      const saved = JSON.parse(raw);
+      return saved.puzzles?.heart?.moves === 1 && saved.puzzles.heart.cells?.[0]?.[1] === 1; // 1 = FILLED
+    } catch {
+      return false;
+    }
+  });
   await page.reload({ waitUntil: 'networkidle' });
   assert.match(await cellAt(page, 0, 1).getAttribute('class'), /is-filled/);
   assert.equal(await page.locator('#moves').textContent(), '1');
