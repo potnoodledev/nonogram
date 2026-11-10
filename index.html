@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="dark">
     <meta name="theme-color" content="#070b14">
-    <title>Nonogram — reveal the hidden picture</title>
+    <title>Grid games — nonogram and sudoku</title>
     <meta
       name="description"
-      content="A free nonogram (picross) puzzle game. Fill the grid using the number clues to reveal a hidden pixel picture. No guessing required."
+      content="A free puzzle site with nonogram and sudoku modes. Fill a grid from number clues or solve a 9×9 sudoku. No guessing required."
     >
     <link
       rel="icon"
@@ -20,11 +20,11 @@
     <a class="skip-link" href="#game">Skip to the puzzle</a>
 
     <header class="site-header">
-      <a class="brand" href="./" aria-label="Nonogram home">
+      <a class="brand" href="./" aria-label="Grid games home">
         <span class="brand-mark" aria-hidden="true">
           <i></i><i></i><i></i><i></i>
         </span>
-        <span class="brand-name">nonogram</span>
+        <span class="brand-name">grid games</span>
       </a>
       <a class="source-link" href="https://github.com/potnoodledev/nonogram">
         <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
@@ -39,6 +39,15 @@
 
     <main class="layout" id="game">
       <section class="game-card" aria-labelledby="puzzle-title">
+        <div class="game-modes" role="group" aria-label="Game mode">
+          <button class="game-mode-button" type="button" data-game-mode="nonogram" aria-pressed="true">
+            Nonogram
+          </button>
+          <button class="game-mode-button" type="button" data-game-mode="sudoku" aria-pressed="false">
+            Sudoku
+          </button>
+        </div>
+
         <div class="game-head">
           <div class="puzzle-id">
             <p class="eyebrow">Puzzle <span id="puzzle-number">1</span> of <span id="puzzle-total">9</span></p>
@@ -71,7 +80,7 @@
 
         <div class="board-area">
           <div class="board-scroll">
-            <div id="board" class="board" role="group" aria-label="Nonogram grid"></div>
+            <div id="board" class="board" role="group" aria-label="Puzzle grid"></div>
           </div>
         </div>
 
@@ -97,54 +106,81 @@
             <span class="badge badge-solved" id="solved-badge" hidden>Solved</span>
           </div>
           <div class="tools">
-            <div class="mode-toggle" role="group" aria-label="Drawing mode">
-              <button class="mode-button" type="button" id="mode-fill" aria-pressed="true">Fill</button>
-              <button class="mode-button" type="button" id="mode-mark" aria-pressed="false">Mark</button>
-            </div>
+            <div id="mode-controls" class="mode-controls"></div>
             <button class="button" type="button" id="check-button">Check</button>
             <button class="button" type="button" id="reset-button">Reset</button>
           </div>
         </div>
 
         <p class="feedback" id="feedback" role="status" aria-live="polite"></p>
-        <p class="board-hint">
-          Drag to paint · Right-click to mark · Arrow keys move, <kbd>Space</kbd> fills, <kbd>X</kbd> marks
-        </p>
+        <p class="board-hint" id="board-hint"></p>
       </section>
 
       <aside class="side">
-        <details class="panel" open>
-          <summary>How to play</summary>
-          <div class="panel-body">
-            <p>
-              Each row and column is labelled with the lengths of its runs of filled squares, in order.
-              Runs are separated by at least one blank square.
-            </p>
-            <p>
-              For example, a clue of <span class="clue-example">2&nbsp;1</span> means two filled squares,
-              then a gap, then one filled square. The clue does not say where in the line they start —
-              the crossing clues narrow that down.
-            </p>
-            <ul class="control-list">
-              <li><strong>Click or tap</strong> a square to fill it.</li>
-              <li>Use <strong>Mark</strong> mode or <strong>right-click</strong> to cross out a blank.</li>
-              <li><strong>Drag</strong> across squares to paint a whole line at once.</li>
-              <li><strong>Check</strong> briefly highlights squares that clash with the solution.</li>
-            </ul>
-          </div>
-        </details>
+        <div class="mode-panels" data-mode-panel="nonogram">
+          <details class="panel" open>
+            <summary>How to play</summary>
+            <div class="panel-body">
+              <p>
+                Each row and column is labelled with the lengths of its runs of filled squares, in order.
+                Runs are separated by at least one blank square.
+              </p>
+              <p>
+                For example, a clue of <span class="clue-example">2&nbsp;1</span> means two filled squares,
+                then a gap, then one filled square. The clue does not say where in the line they start —
+                the crossing clues narrow that down.
+              </p>
+              <ul class="control-list">
+                <li><strong>Click or tap</strong> a square to fill it.</li>
+                <li>Use <strong>Mark</strong> mode or <strong>right-click</strong> to cross out a blank.</li>
+                <li><strong>Drag</strong> across squares to paint a whole line at once.</li>
+                <li><strong>Check</strong> briefly highlights squares that clash with the solution.</li>
+              </ul>
+            </div>
+          </details>
 
-        <details class="panel">
-          <summary>Tips</summary>
-          <div class="panel-body">
-            <ul class="control-list">
-              <li>Start with the longest clues: a run as long as the line fills the whole line.</li>
-              <li>A completed row or column turns its numbers teal, so you can see the progress.</li>
-              <li>Every puzzle here has one solution and can be solved by logic alone.</li>
-              <li>Your progress is saved in this browser automatically.</li>
-            </ul>
-          </div>
-        </details>
+          <details class="panel">
+            <summary>Nonogram tips</summary>
+            <div class="panel-body">
+              <ul class="control-list">
+                <li>Start with the longest clues: a run as long as the line fills the whole line.</li>
+                <li>A completed row or column turns its numbers teal, so you can see the progress.</li>
+                <li>Every puzzle here has one solution and can be solved by logic alone.</li>
+                <li>Your progress is saved in this browser automatically.</li>
+              </ul>
+            </div>
+          </details>
+        </div>
+
+        <div class="mode-panels" data-mode-panel="sudoku" hidden>
+          <details class="panel" open>
+            <summary>How to play</summary>
+            <div class="panel-body">
+              <p>
+                Fill the 9×9 grid so every row, every column and every 3×3 box contains the digits
+                1–9 exactly once. The printed numbers are fixed.
+              </p>
+              <ul class="control-list">
+                <li><strong>Select</strong> a cell, then click a number or press <kbd>1</kbd>–<kbd>9</kbd>.</li>
+                <li>Press <kbd>Backspace</kbd> or <kbd>Delete</kbd>, or right-click, to clear a cell.</li>
+                <li>Selecting a cell highlights its row, column and box.</li>
+                <li><strong>Check</strong> briefly highlights digits that clash with the solution.</li>
+              </ul>
+            </div>
+          </details>
+
+          <details class="panel">
+            <summary>Sudoku tips</summary>
+            <div class="panel-body">
+              <ul class="control-list">
+                <li>Start with the rows, columns or boxes that already hold the most numbers.</li>
+                <li>A digit can only appear once in each row, column and box.</li>
+                <li>Every puzzle here has exactly one solution and can be solved by logic alone.</li>
+                <li>Your progress is saved in this browser automatically.</li>
+              </ul>
+            </div>
+          </details>
+        </div>
 
         <details class="panel">
           <summary>About this demo</summary>
@@ -163,7 +199,7 @@
 
     <footer class="site-footer">
       <p>
-        Made for the <a href="https://github.com/potnoodledev/nonogram">nonogram</a> example ·
+        Made for the <a href="https://github.com/potnoodledev/nonogram">grid games</a> example ·
         Hosted on GitHub Pages
       </p>
     </footer>

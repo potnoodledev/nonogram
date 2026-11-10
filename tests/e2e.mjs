@@ -1,5 +1,5 @@
 /**
- * End-to-end smoke test for the nonogram game.
+ * End-to-end smoke test for the grid games (nonogram and sudoku).
  *
  * Requires Playwright (`npm i -D playwright && npx playwright install chromium`)
  * and a running static server (`npm run serve` in another terminal), then:
@@ -13,6 +13,7 @@ import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 
 import { PUZZLES } from '../js/puzzles.js';
+import { SUDOKU_PUZZLES } from '../js/sudoku-puzzles.js';
 
 const baseUrl = process.env.BASE_URL ?? 'http://127.0.0.1:4173/';
 const outputDir = path.resolve('test-results');
@@ -79,6 +80,8 @@ function assertCluesNotClipped(page) {
   assert.equal(await page.title(), 'Heart — Nonogram');
   assert.equal(await page.locator('h1').textContent(), 'Heart');
   assert.equal(await page.locator('#puzzle-size').textContent(), '5 × 5');
+  assert.equal(await page.evaluate(() => location.hash), '#nonogram/heart', 'legacy #heart links still work');
+  assert.equal(await page.locator('[data-game-mode="nonogram"]').getAttribute('aria-pressed'), 'true');
   assert.equal(await boardCells(page).count(), 25);
   assert.equal(await page.locator('.clue-row').count(), 5);
   assert.equal(await page.locator('.clue-column').count(), 5);
@@ -255,6 +258,200 @@ function assertCluesNotClipped(page) {
   await assertNoHorizontalOverflow(page);
   await assertCluesNotClipped(page);
   await page.screenshot({ path: path.join(outputDir, 'mobile-rocket.png'), fullPage: true });
+  await context.close();
+}
+
+/* --------------------------------------------------------------------------
+   6. Sudoku mode: board, controls, checking, conflicts and persistence
+   -------------------------------------------------------------------------- */
+
+{
+  const { context, page } = await newPage();
+  await page.goto(`${baseUrl}#sudoku/first-light`, { waitUntil: 'networkidle' });
+  const puzzle = SUDOKU_PUZZLES.find((candidate) => candidate.id === 'first-light');
+  assert.ok(puzzle);
+
+  assert.equal(await page.title(), 'First Light — Sudoku');
+  assert.equal(await page.locator('h1').textContent(), 'First Light');
+  assert.equal(await page.locator('#puzzle-size').textContent(), '9 × 9');
+  assert.equal(await boardCells(page).count(), 81);
+  assert.equal(await page.locator('.cell.is-given').count(), puzzle.givensCount);
+  assert.equal(await page.locator('.clue-row').count(), 0, 'Sudoku has no clue rows');
+  assert.equal(await page.locator('#solved-badge').isVisible(), false);
+  assert.equal(await page.locator('#moves').textContent(), '0');
+  assert.equal(await page.locator('[data-game-mode="sudoku"]').getAttribute('aria-pressed'), 'true');
+  assert.equal(await page.evaluate(() => location.hash), '#sudoku/first-light');
+
+  await assertNoHorizontalOverflow(page);
+  await page.screenshot({ path: path.join(outputDir, 'desktop-sudoku.png') });
+
+  /* Selecting an editable cell and typing a digit, then typing it again
+     toggles the digit off. */
+  const firstOpen = puzzle.givens
+    .map((row, rowIndex) => row.map((value, columnIndex) => (value === 0 ? [rowIndex, columnIndex] : null)))
+    .flat()
+    .find(Boolean);
+  assert.ok(firstOpen);
+  await cellAt(page, ...firstOpen).click();
+  await page.keyboard.press('4');
+  assert.equal(await cellAt(page, ...firstOpen).textContent(), '4');
+  assert.equal(await page.locator('#moves').textContent(), '1');
+  await page.keyboard.press('4');
+  assert.equal(await cellAt(page, ...firstOpen).textContent(), '');
+
+  /* The on-screen digit pad fills and erases a selected cell. */
+  await cellAt(page, ...firstOpen).click();
+  await page.locator('[data-digit="7"]').click();
+  assert.equal(await cellAt(page, ...firstOpen).textContent(), '7');
+  await page.locator('[data-digit="0"]').click();
+  assert.equal(await cellAt(page, ...firstOpen).textContent(), '');
+
+  /* Givens cannot be edited, and the digit pad disables itself for them. */
+  const given = await page.locator('.cell.is-given').first().evaluate((el) => ({
+    row: Number(el.dataset.row),
+    column: Number(el.dataset.column),
+    text: el.textContent,
+  }));
+  await cellAt(page, given.row, given.column).click();
+  assert.equal(await page.locator('[data-digit="5"]').isDisabled(), true);
+  await page.keyboard.press('5');
+  assert.equal(await cellAt(page, given.row, given.column).textContent(), given.text);
+
+  /* Arrow keys move the roving focus target. */
+  await cellAt(page, ...firstOpen).focus();
+  await page.keyboard.press('ArrowRight');
+  const focused = await page.evaluate(() => ({
+    row: Number(document.activeElement?.dataset.row),
+    column: Number(document.activeElement?.dataset.column),
+  }));
+  assert.equal(focused.row, firstOpen[0]);
+  assert.equal(focused.column, firstOpen[1] + 1);
+
+  /* Check highlights a wrong digit. */
+  await page.getByRole('button', { name: 'Reset' }).click();
+  const wrongCell = puzzle.givens
+    .map((row, rowIndex) => row.map((value, columnIndex) => (value === 0 ? [rowIndex, columnIndex] : null)))
+    .flat()
+    .find(Boolean);
+  const wrongDigit = (puzzle.solution[wrongCell[0]][wrongCell[1]] % 9) + 1;
+  await cellAt(page, ...wrongCell)
+    .click();
+  await page.keyboard.press(String(wrongDigit));
+  await page.getByRole('button', { name: 'Check' }).click();
+  await page.locator('.cell.is-wrong').first().waitFor();
+  assert.match(await page.locator('#feedback').textContent(), /wrong/);
+  assert.equal(await page.locator('.cell.is-wrong').count(), 1);
+
+  /* Duplicate digits in a row are flagged as conflicts immediately. */
+  await page.getByRole('button', { name: 'Reset' }).click();
+  const openCells = puzzle.givens
+    .map((row, rowIndex) => row.map((value, columnIndex) => (value === 0 ? [rowIndex, columnIndex] : null)))
+    .flat()
+    .filter(Boolean);
+  const conflictRow = openCells.find(([row]) => openCells.filter(([other]) => other === row).length >= 2)?.[0];
+  const conflictCells = openCells.filter(([row]) => row === conflictRow).slice(0, 2);
+  assert.equal(conflictCells.length, 2, 'a row with two editable cells');
+  for (const [row, column] of conflictCells) {
+    await cellAt(page, row, column).click();
+    await page.keyboard.press('1');
+  }
+  assert.ok((await page.locator('.cell.is-conflict').count()) >= 2, 'duplicate digits conflict');
+  await page.getByRole('button', { name: 'Reset' }).click();
+
+  /* Progress is stored under the Sudoku key and restored after a reload. */
+  const savedCell = openCells[0];
+  const savedDigit = puzzle.solution[savedCell[0]][savedCell[1]];
+  await cellAt(page, ...savedCell).click();
+  await page.keyboard.press(String(savedDigit));
+  await page.waitForFunction(() => {
+    const raw = localStorage.getItem('sudoku:progress:v1');
+    if (!raw) return false;
+    try {
+      const saved = JSON.parse(raw);
+      return saved.puzzles?.['first-light']?.moves === 1;
+    } catch {
+      return false;
+    }
+  });
+  await page.reload({ waitUntil: 'networkidle' });
+  assert.equal(await cellAt(page, ...savedCell).textContent(), String(savedDigit));
+  assert.equal(await page.locator('#moves').textContent(), '1');
+  await page.getByRole('button', { name: 'Reset' }).click();
+
+  /* Switching modes keeps each mode's own puzzle and URL. */
+  await page.locator('[data-game-mode="nonogram"]').click();
+  assert.equal(await page.title(), 'Heart — Nonogram');
+  assert.equal(await boardCells(page).count(), 25);
+  assert.equal(await page.locator('[data-game-mode="nonogram"]').getAttribute('aria-pressed'), 'true');
+  assert.equal(await page.evaluate(() => location.hash), '#nonogram/heart');
+
+  await page.locator('[data-game-mode="sudoku"]').click();
+  assert.equal(await page.title(), 'First Light — Sudoku');
+  assert.equal(await boardCells(page).count(), 81);
+  assert.equal(await page.evaluate(() => location.hash), '#sudoku/first-light');
+
+  /* Reloading without a hash remembers the last mode. */
+  await page.goto(baseUrl, { waitUntil: 'networkidle' });
+  assert.equal(await page.title(), 'First Light — Sudoku');
+  assert.equal(await page.locator('[data-game-mode="sudoku"]').getAttribute('aria-pressed'), 'true');
+  await context.close();
+}
+
+/* --------------------------------------------------------------------------
+   7. Solving a Sudoku and replaying it
+   -------------------------------------------------------------------------- */
+
+{
+  const { context, page } = await newPage();
+  await page.goto(`${baseUrl}#sudoku/first-light`, { waitUntil: 'networkidle' });
+  const puzzle = SUDOKU_PUZZLES.find((candidate) => candidate.id === 'first-light');
+  assert.ok(puzzle);
+
+  let firstFill = true;
+  for (let row = 0; row < 9; row += 1) {
+    for (let column = 0; column < 9; column += 1) {
+      if (puzzle.givens[row][column] !== 0) continue;
+      await cellAt(page, row, column).click();
+      await page.keyboard.press(String(puzzle.solution[row][column]));
+      if (firstFill) {
+        firstFill = false;
+        await page.waitForFunction(
+          () => document.querySelector('#timer')?.textContent !== '0:00',
+          null,
+          { timeout: 5000 },
+        );
+      }
+    }
+  }
+
+  await page.locator('#win-dialog[open]').waitFor();
+  assert.equal(await page.locator('#solved-badge').isVisible(), true);
+  assert.equal(await page.locator('.cell.has-value').count(), 81);
+  const detail = await page.locator('#win-detail').textContent();
+  assert.match(detail, /First Light · \d+:\d{2} · \d+ moves/);
+  assert.equal(await page.locator('#win-title').textContent(), 'Grid solved!');
+  await page.screenshot({ path: path.join(outputDir, 'desktop-sudoku-solved.png') });
+
+  await page.getByRole('button', { name: 'Play again' }).click();
+  await page.locator('#win-dialog').waitFor({ state: 'hidden' });
+  assert.equal(await page.locator('.cell.has-value').count(), puzzle.givensCount);
+  assert.equal(await page.locator('#solved-badge').isVisible(), false);
+  assert.equal(await page.locator('#moves').textContent(), '0');
+  await context.close();
+}
+
+/* --------------------------------------------------------------------------
+   8. The mobile Sudoku layout
+   -------------------------------------------------------------------------- */
+
+{
+  const { context, page } = await newPage({ width: 390, height: 844 });
+  await page.goto(`${baseUrl}#sudoku/night-shift`, { waitUntil: 'networkidle' });
+  assert.equal(await boardCells(page).count(), 81);
+  assert.equal(await page.locator('#puzzle-difficulty').textContent(), 'Hard');
+  assert.equal(await page.locator('.digit-pad').isVisible(), true);
+  await assertNoHorizontalOverflow(page);
+  await page.screenshot({ path: path.join(outputDir, 'mobile-sudoku.png'), fullPage: true });
   await context.close();
 }
 

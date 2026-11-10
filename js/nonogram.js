@@ -9,6 +9,8 @@
  *   MARKED - the player's "this is blank" cross
  */
 
+export { createGrid } from './grid.js';
+
 export const EMPTY = 0;
 export const FILLED = 1;
 export const MARKED = 2;
@@ -55,11 +57,6 @@ export function cluesMatch(a, b) {
     if (a[index] !== b[index]) return false;
   }
   return true;
-}
-
-/** Build a grid filled with one value. */
-export function createGrid(rowCount, columnCount, value = EMPTY) {
-  return Array.from({ length: rowCount }, () => Array(columnCount).fill(value));
 }
 
 /** Parse puzzle art ("#" filled, everything else blank) into a boolean grid. */
